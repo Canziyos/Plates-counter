@@ -14,6 +14,7 @@
 
   # plan for the next week:
    - Final Selection of Sensors.
+   - make changes in project proposal
    - Starting with the software development phase of the project (Starting with implementation).
    - prototype planing and development.
    - planing for another study visit.
