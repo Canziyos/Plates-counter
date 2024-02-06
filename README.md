@@ -14,11 +14,11 @@
 
   # plane for the next week:
    - Final Selection of Sensors.
-   - Starting with the software development phase of the project.
+   - Starting with the software development phase of the project (Starting with implementation).
    - prototype planing and development.
    - planing for another study visit.
    - review Latex and project report template.
-   - Starting with implementation.
+
 
 
 
