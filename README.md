@@ -5,11 +5,11 @@
 
   - project place: "Tallhag School in Kalmar" Visit.
   - Prototype conceptualization.
-  - environment tools and setups Installed.
-  - The esp-IDF with VSCode was Tested.
-  - GitHub repository create.
   - Heltec lora 32 v2 with display choosed as development board.
-  - Some new projects intiated and .
+  - development environment and tools setup.
+  - The esp-IDF with VSCode was Tested.
+  - GitHub repository created.
+  - Some new projects in ESP-IDF intiated and .
   - various sensors tested in the lab environment " ultrasonic, different short-range IR, LiDAR sensor, Sharp sensor 2Y0A02 ".
 
   # plane for the next week:
