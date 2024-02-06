@@ -12,7 +12,7 @@
   - Some new projects in ESP-IDF intiated and .
   - various sensors tested in the lab environment " ultrasonic, different short-range IR, LiDAR sensor, Sharp sensor 2Y0A02 ".
 
-  # plane for the next week:
+  # plan for the next week:
    - Final Selection of Sensors.
    - Starting with the software development phase of the project (Starting with implementation).
    - prototype planing and development.
