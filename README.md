@@ -24,7 +24,6 @@ Contributions to the Automated Dish Counting System project are welcome! If you'
 - Fork the repository and create a new branch for your contributions.
 - Make your changes and submit a pull request, providing a clear description of the proposed changes and their rationale.
 - Ensure that your code follows the project's coding standards and conventions.
-- Collaborate with other contributors and maintainers to review and refine your contributions.
 
 ## License
 This project is licensed under the [MIT License](LICENSE).
