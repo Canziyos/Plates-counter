@@ -16,7 +16,7 @@ Verify voltage levels and pin assignments against the exact board and sensor rev
 Use an ESP-IDF environment compatible with the vendored `ttn-esp32` component:
 
 ```sh
-cd prototype_B_basic
+cd firmware
 idf.py set-target esp32
 idf.py menuconfig
 idf.py build

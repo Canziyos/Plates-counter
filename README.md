@@ -6,11 +6,11 @@ An ESP32 proof of concept for counting trays or dishes passing through a cafeter
 
 ```text
 .
-├── prototype_B_basic/  # Canonical ESP-IDF firmware
+├── firmware/           # Canonical ESP-IDF firmware
 └── Prototype_A/        # Historical first prototype
 ```
 
-Start with [`prototype_B_basic/README.md`](prototype_B_basic/README.md) for hardware assumptions, configuration and build commands.
+Start with [`firmware/README.md`](firmware/README.md) for hardware assumptions, configuration and build commands.
 
 ## Status
 
