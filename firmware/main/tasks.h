@@ -13,8 +13,6 @@ void initialize_gpio(void);
 void monitorIRSensorTask(void *parameter);
 void readPulseTask(void *parameter);
 
-int measureDistance(void);
-float kalmanFilter(int measurement);
 uint32_t dishCounterGetCount(void);
 
 #endif

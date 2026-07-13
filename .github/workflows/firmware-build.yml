@@ -5,11 +5,13 @@ on:
     branches: [main]
     paths:
       - "firmware/**"
+      - "tests/**"
       - ".github/workflows/firmware-build.yml"
   pull_request:
     branches: [main]
     paths:
       - "firmware/**"
+      - "tests/**"
       - ".github/workflows/firmware-build.yml"
   workflow_dispatch:
 
@@ -17,6 +19,23 @@ permissions:
   contents: read
 
 jobs:
+  host-tests:
+    name: Host logic tests
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Configure tests
+        run: cmake -S tests -B tests/build
+
+      - name: Build tests
+        run: cmake --build tests/build
+
+      - name: Run tests
+        run: ctest --test-dir tests/build --output-on-failure
+
   build:
     name: ESP-IDF v5.0 / ESP32
     runs-on: ubuntu-latest

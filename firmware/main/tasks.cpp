@@ -1,4 +1,5 @@
 #include "tasks.h"
+#include "dish_counter_logic.h"
 
 #include <atomic>
 
@@ -14,18 +15,17 @@ constexpr int kDebounceDelayMs = 50;
 constexpr int kMeasurementDelayMs = 100;
 constexpr int kMeasurementWindowMs = 10000;
 constexpr int kIdleLogIntervalMs = 20000;
-constexpr int kRequiredConsecutiveSamples = 5;
-constexpr int kMinDistance = 200;
-constexpr int kMaxDistance = 250;
+constexpr DishClassificationConfig kDishClassificationConfig = {
+    .minimumDistance = 200,
+    .maximumDistance = 250,
+    .requiredConsecutiveSamples = 5,
+};
 constexpr int64_t kPulseWaitTimeoutUs = 3000;
 constexpr int64_t kMaxDistancePulseUs = 1850;
 
 const char *kLogTag = "dish_counter";
 
 std::atomic<uint32_t> dishCount{0};
-float estimatedError = 1.0F;
-constexpr float kMeasuredError = 0.1F;
-float currentEstimate = 0.0F;
 
 bool waitForLevel(gpio_num_t gpio, int level, int64_t timeoutUs)
 {
@@ -36,6 +36,25 @@ bool waitForLevel(gpio_num_t gpio, int level, int64_t timeoutUs)
         }
     }
     return true;
+}
+
+int measureDistance()
+{
+    if (!waitForLevel(kDistanceSensorGpio, 1, kPulseWaitTimeoutUs)) {
+        return -1;
+    }
+    const int64_t pulseStart = esp_timer_get_time();
+
+    if (!waitForLevel(kDistanceSensorGpio, 0, kPulseWaitTimeoutUs)) {
+        return -1;
+    }
+    const int64_t pulseDuration = esp_timer_get_time() - pulseStart;
+    if (pulseDuration <= 0 || pulseDuration > kMaxDistancePulseUs) {
+        return -1;
+    }
+
+    const int distance = static_cast<int>((pulseDuration - 1000) * 3 / 4);
+    return distance < 0 ? 0 : distance;
 }
 
 } // namespace
@@ -83,6 +102,7 @@ void readPulseTask(void *)
 {
     const TickType_t delay = pdMS_TO_TICKS(kMeasurementDelayMs);
     const TickType_t window = pdMS_TO_TICKS(kMeasurementWindowMs);
+    ScalarKalmanFilter distanceFilter;
 
     while (true) {
         if (xSemaphoreTake(trayDetectionSemaphore, portMAX_DELAY) != pdTRUE) {
@@ -91,61 +111,28 @@ void readPulseTask(void *)
 
         ESP_LOGI(kLogTag, "Starting distance measurement");
         const TickType_t started = xTaskGetTickCount();
-        int consecutiveSamples = 0;
+        DishClassifier classifier(kDishClassificationConfig);
 
         while ((xTaskGetTickCount() - started) <= window) {
             const int rawDistance = measureDistance();
             if (rawDistance >= 0) {
-                const int filteredDistance = static_cast<int>(kalmanFilter(rawDistance));
-                if (filteredDistance >= kMinDistance && filteredDistance <= kMaxDistance) {
-                    ++consecutiveSamples;
-                    if (consecutiveSamples >= kRequiredConsecutiveSamples) {
-                        const uint32_t newCount = dishCount.fetch_add(1) + 1;
-                        ESP_LOGI(kLogTag, "Tray with dishes counted; total=%lu",
-                                 static_cast<unsigned long>(newCount));
-                        break;
-                    }
-                } else {
-                    consecutiveSamples = 0;
+                const int filteredDistance = static_cast<int>(distanceFilter.update(rawDistance));
+                if (classifier.recordSample(filteredDistance)) {
+                    const uint32_t newCount = dishCount.fetch_add(1) + 1;
+                    ESP_LOGI(kLogTag, "Tray with dishes counted; total=%lu",
+                             static_cast<unsigned long>(newCount));
+                    break;
                 }
             } else {
-                consecutiveSamples = 0;
+                classifier.recordSample(rawDistance);
             }
             vTaskDelay(delay);
         }
 
-        if (consecutiveSamples < kRequiredConsecutiveSamples) {
+        if (!classifier.classified()) {
             ESP_LOGW(kLogTag, "Measurement window expired without a count");
         }
     }
-}
-
-int measureDistance(void)
-{
-    if (!waitForLevel(kDistanceSensorGpio, 1, kPulseWaitTimeoutUs)) {
-        return -1;
-    }
-    const int64_t pulseStart = esp_timer_get_time();
-
-    if (!waitForLevel(kDistanceSensorGpio, 0, kPulseWaitTimeoutUs)) {
-        return -1;
-    }
-    const int64_t pulseDuration = esp_timer_get_time() - pulseStart;
-    if (pulseDuration <= 0 || pulseDuration > kMaxDistancePulseUs) {
-        return -1;
-    }
-
-    const int distance = static_cast<int>((pulseDuration - 1000) * 3 / 4);
-    return distance < 0 ? 0 : distance;
-}
-
-float kalmanFilter(int measurement)
-{
-    const float predictedError = estimatedError + kMeasuredError;
-    const float gain = predictedError / (predictedError + kMeasuredError);
-    currentEstimate += gain * (static_cast<float>(measurement) - currentEstimate);
-    estimatedError = (1.0F - gain) * predictedError;
-    return currentEstimate;
 }
 
 uint32_t dishCounterGetCount(void)
