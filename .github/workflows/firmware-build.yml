@@ -60,8 +60,12 @@ jobs:
           path: firmware
 
       - name: Generate firmware checksums
-        working-directory: firmware/build
-        run: sha256sum dish_counter.bin bootloader/bootloader.bin partition_table/partition-table.bin > SHA256SUMS
+        run: >-
+          sha256sum
+          firmware/build/dish_counter.bin
+          firmware/build/bootloader/bootloader.bin
+          firmware/build/partition_table/partition-table.bin
+          > firmware/SHA256SUMS
 
       - name: Upload firmware binaries
         uses: actions/upload-artifact@v4
@@ -72,6 +76,6 @@ jobs:
             firmware/build/bootloader/bootloader.bin
             firmware/build/partition_table/partition-table.bin
             firmware/build/*args*
-            firmware/build/SHA256SUMS
+            firmware/SHA256SUMS
           if-no-files-found: error
           retention-days: 14
