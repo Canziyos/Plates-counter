@@ -1,16 +1,15 @@
-menu "Example Configuration"
+menu "Dish counter configuration"
 
-    choice EXAMPLE_LCD_CONTROLLER
-        prompt "LCD controller model"
-        default EXAMPLE_LCD_CONTROLLER_SSD1306
-        help
-            Select LCD controller model
+    config DISH_COUNTER_DEV_EUI
+        string "LoRaWAN device EUI (16 hexadecimal characters)"
+        default ""
 
-        config EXAMPLE_LCD_CONTROLLER_SSD1306
-            bool "SSD1306"
+    config DISH_COUNTER_APP_EUI
+        string "LoRaWAN application EUI (16 hexadecimal characters)"
+        default ""
 
-        config EXAMPLE_LCD_CONTROLLER_SH1107
-            bool "SH1107"
-    endchoice
+    config DISH_COUNTER_APP_KEY
+        string "LoRaWAN application key (32 hexadecimal characters)"
+        default ""
 
 endmenu

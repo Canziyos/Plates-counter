@@ -1,35 +1,35 @@
-| Supported Targets | ESP32 | ESP32-C2 | ESP32-C3 | ESP32-C6 | ESP32-H2 | ESP32-S2 | ESP32-S3 |
-| ----------------- | ----- | -------- | -------- | -------- | -------- | -------- | -------- |
+# Dish Counter Firmware
 
-# _Sample project_
+This directory contains the canonical ESP-IDF firmware. `Prototype_A` at the repository root is retained only as historical reference.
 
-(See the README.md file in the upper level 'examples' directory for more information about examples.)
+## Hardware assumptions
 
-This is the simplest buildable example. The example is used by command `idf.py create-project`
-that copies the project to user specified path and set it's name. For more information follow the [docs page](https://docs.espressif.com/projects/esp-idf/en/latest/api-guides/build-system.html#start-a-new-project)
+- ESP32 Heltec LoRa board with an SX127x radio
+- Active-low IR tray sensor on GPIO 17
+- Distance-sensor pulse input on GPIO 23
+- SX127x SPI and interrupt pins as defined in `main/main.cpp`
 
+Verify voltage levels and pin assignments against the exact board and sensor revisions before powering the system.
 
+## Build
 
-## How to use example
-We encourage the users to use the example as a template for the new projects.
-A recommended way is to follow the instructions on a [docs page](https://docs.espressif.com/projects/esp-idf/en/latest/api-guides/build-system.html#start-a-new-project).
+Use an ESP-IDF environment compatible with the vendored `ttn-esp32` component:
 
-## Example folder contents
-
-The project **sample_project** contains one source file in C language [main.c](main/main.c). The file is located in folder [main](main).
-
-ESP-IDF projects are built using CMake. The project build configuration is contained in `CMakeLists.txt`
-files that provide set of directives and instructions describing the project's source files and targets
-(executable, library, or both). 
-
-Below is short explanation of remaining files in the project folder.
-
+```sh
+cd prototype_B_basic
+idf.py set-target esp32
+idf.py menuconfig
+idf.py build
+idf.py -p PORT flash monitor
 ```
-├── CMakeLists.txt
-├── main
-│   ├── CMakeLists.txt
-│   └── main.c
-└── README.md                  This is the file you are currently reading
-```
-Additionally, the sample project contains Makefile and component.mk files, used for the legacy Make based build system. 
-They are not used or needed when building with CMake and idf.py.
+
+Under **Dish counter configuration**, provide the DevEUI, AppEUI and AppKey. Credentials are intentionally excluded from source control.
+
+## Current behavior
+
+1. The IR task detects the leading edge of a tray and signals the measurement task.
+2. The measurement task samples the distance pulse for up to ten seconds.
+3. Five consecutive filtered samples inside the configured range produce one count.
+4. Pulse waits time out, preventing a disconnected sensor from locking a FreeRTOS task.
+
+LoRa transmission code exists but its task remains disabled in `main.cpp` until payload cadence and backend integration are validated.

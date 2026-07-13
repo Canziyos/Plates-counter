@@ -1,221 +1,154 @@
 #include "tasks.h"
+
+#include <atomic>
+
 #include "driver/gpio.h"
-#include "esp_timer.h"
 #include "esp_log.h"
+#include "esp_timer.h"
 
+namespace {
 
-static const char *LOG_TAG = "sensor_manager";
+constexpr gpio_num_t kIrSensorGpio = GPIO_NUM_17;
+constexpr gpio_num_t kDistanceSensorGpio = GPIO_NUM_23;
+constexpr int kDebounceDelayMs = 50;
+constexpr int kMeasurementDelayMs = 100;
+constexpr int kMeasurementWindowMs = 10000;
+constexpr int kIdleLogIntervalMs = 20000;
+constexpr int kRequiredConsecutiveSamples = 5;
+constexpr int kMinDistance = 200;
+constexpr int kMaxDistance = 250;
+constexpr int64_t kPulseWaitTimeoutUs = 3000;
+constexpr int64_t kMaxDistancePulseUs = 1850;
 
-// Global variable definitions
-volatile bool isTrayPresent = false;
-volatile bool distanceSensorTaskShouldRun = false;
-int count_object = 0;
-int signals = 0;
-bool objectCounted = false;
+const char *kLogTag = "dish_counter";
 
-// Constants
-const int DEBOUNCE_DELAY_MS = 50;
-const int CALIBRATION_INTERVAL = 5000;
-const float MIN_CONFIDENCE = 0.8;
-const int DISTANCE_FILTER_SAMPLES = 5;
+std::atomic<uint32_t> dishCount{0};
+float estimatedError = 1.0F;
+constexpr float kMeasuredError = 0.1F;
+float currentEstimate = 0.0F;
 
-// Definitions
-#define IR_SENSOR_GPIO GPIO_NUM_17
-#define DISTANCE_SENSOR_GPIO GPIO_NUM_23
-#define MAX_DISTANCE_PULSE_DURATION 1850
+bool waitForLevel(gpio_num_t gpio, int level, int64_t timeoutUs)
+{
+    const int64_t deadline = esp_timer_get_time() + timeoutUs;
+    while (gpio_get_level(gpio) != level) {
+        if (esp_timer_get_time() >= deadline) {
+            return false;
+        }
+    }
+    return true;
+}
 
-static int calibrationCounter = 0;
-static int calibrationSamples = 0;
-static int minDistance = 200;
-static int maxDistance = 250;
-// static int distanceFilterBuffer[DISTANCE_FILTER_SAMPLES] = {0};
-// static int filterIndex = 0;
-// static bool waitForNewTrayDetection = false; // Control waiting for new tray detection
-
-// Kalman filter variables
-static float kalmanGain = 0.5;
-static float estimatedError = 1.0;
-static float measuredError = 0.1;
-static float currentEstimate = 0.0;
+} // namespace
 
 void initialize_gpio(void)
 {
-    gpio_config_t ioConfig = {};
-    ioConfig.intr_type = GPIO_INTR_DISABLE;
-    ioConfig.mode = GPIO_MODE_INPUT;
-    ioConfig.pin_bit_mask = (1ULL << IR_SENSOR_GPIO) | (1ULL << DISTANCE_SENSOR_GPIO);
-    ioConfig.pull_up_en = GPIO_PULLUP_ENABLE;
-    ioConfig.pull_down_en = GPIO_PULLDOWN_DISABLE;
-    gpio_config(&ioConfig);
+    gpio_config_t config = {};
+    config.intr_type = GPIO_INTR_DISABLE;
+    config.mode = GPIO_MODE_INPUT;
+    config.pin_bit_mask = (1ULL << kIrSensorGpio) | (1ULL << kDistanceSensorGpio);
+    config.pull_up_en = GPIO_PULLUP_ENABLE;
+    config.pull_down_en = GPIO_PULLDOWN_DISABLE;
+    ESP_ERROR_CHECK(gpio_config(&config));
 }
 
-void monitorIRSensorTask(void *pvParameter)
+void monitorIRSensorTask(void *)
 {
-    const TickType_t xDelay = pdMS_TO_TICKS(DEBOUNCE_DELAY_MS);
-    const TickType_t idleTime = pdMS_TO_TICKS(20000);
-    TickType_t lastDetectionTime = xTaskGetTickCount();
+    const TickType_t delay = pdMS_TO_TICKS(kDebounceDelayMs);
+    const TickType_t idleInterval = pdMS_TO_TICKS(kIdleLogIntervalMs);
+    TickType_t lastDetection = xTaskGetTickCount();
     bool lastTrayState = false;
 
-    while (true)
-    {
-        bool currentTrayState = !gpio_get_level(IR_SENSOR_GPIO);
-
-        if (currentTrayState != lastTrayState)
-        {
-            lastTrayState = currentTrayState;
-
-            if (currentTrayState)
-            {
-                ESP_LOGI(LOG_TAG, "Tray detected.");
-                lastDetectionTime = xTaskGetTickCount();
+    while (true) {
+        const bool trayPresent = gpio_get_level(kIrSensorGpio) == 0;
+        if (trayPresent != lastTrayState) {
+            lastTrayState = trayPresent;
+            if (trayPresent) {
+                lastDetection = xTaskGetTickCount();
+                ESP_LOGI(kLogTag, "Tray detected");
                 xSemaphoreGive(trayDetectionSemaphore);
-                ESP_LOGI(LOG_TAG, "Semaphore given by taskMonitorIRSensor");
-            }
-            else
-            {
-                ESP_LOGI(LOG_TAG, "Tray removed.");
+            } else {
+                ESP_LOGI(kLogTag, "Tray removed");
             }
         }
 
-        // Checks for idle condition based on last detection time
-        if ((xTaskGetTickCount() - lastDetectionTime) > idleTime)
-        {
-            // Logic for handling idle condition
-            ESP_LOGI(LOG_TAG, "System is idle. No tray detected for 20 seconds.");
-            // Resets the detection time to avoid repetitive idle logs.
-            lastDetectionTime = xTaskGetTickCount();
+        if ((xTaskGetTickCount() - lastDetection) > idleInterval) {
+            ESP_LOGI(kLogTag, "Idle: no tray detected for %d seconds", kIdleLogIntervalMs / 1000);
+            lastDetection = xTaskGetTickCount();
         }
-
-        vTaskDelay(xDelay);
+        vTaskDelay(delay);
     }
 }
 
-void readPulseTask(void *pvParameter)
+void readPulseTask(void *)
 {
-    const TickType_t xDelay = pdMS_TO_TICKS(100);
-    const TickType_t tenSeconds = pdMS_TO_TICKS(10000);
+    const TickType_t delay = pdMS_TO_TICKS(kMeasurementDelayMs);
+    const TickType_t window = pdMS_TO_TICKS(kMeasurementWindowMs);
 
-    while (true)
-    {
-        // Wait for the semaphore indefinitely.
-        if (xSemaphoreTake(trayDetectionSemaphore, portMAX_DELAY) == pdTRUE)
-        {
-            // Indicate semaphore obtained
-            ESP_LOGI(LOG_TAG, "Semaphore obtained by taskReadPulse");
-            bool distanceSensorInRange = false;
-            TickType_t lastTrayTime = xTaskGetTickCount();
+    while (true) {
+        if (xSemaphoreTake(trayDetectionSemaphore, portMAX_DELAY) != pdTRUE) {
+            continue;
+        }
 
-            while (true)
-            {
-                int rawDistance = measureDistance();
+        ESP_LOGI(kLogTag, "Starting distance measurement");
+        const TickType_t started = xTaskGetTickCount();
+        int consecutiveSamples = 0;
 
-                if (rawDistance >= 0)
-                {
-                    float kalmanValue = kalmanFilter(rawDistance);
-                    int smoothedDistance = (int)kalmanValue;
-
-                    if (smoothedDistance >= minDistance && smoothedDistance <= maxDistance)
-                    {
-                        distanceSensorInRange = true;
-                    }
-                    else
-                    {
-                        distanceSensorInRange = false;
-                    }
-                }
-
-                if (distanceSensorInRange)
-                {
-                    signals++;
-
-                    if (signals >= 5)
-                    {
-                        // Counting is done only once.
-                        count_object++;
-                        ESP_LOGI(LOG_TAG, "Tray with dishes detected - Total count: %d", count_object);
+        while ((xTaskGetTickCount() - started) <= window) {
+            const int rawDistance = measureDistance();
+            if (rawDistance >= 0) {
+                const int filteredDistance = static_cast<int>(kalmanFilter(rawDistance));
+                if (filteredDistance >= kMinDistance && filteredDistance <= kMaxDistance) {
+                    ++consecutiveSamples;
+                    if (consecutiveSamples >= kRequiredConsecutiveSamples) {
+                        const uint32_t newCount = dishCount.fetch_add(1) + 1;
+                        ESP_LOGI(kLogTag, "Tray with dishes counted; total=%lu",
+                                 static_cast<unsigned long>(newCount));
                         break;
                     }
+                } else {
+                    consecutiveSamples = 0;
                 }
-
-                vTaskDelay(xDelay);
-
-                if (xTaskGetTickCount() - lastTrayTime > tenSeconds)
-                {
-                    ESP_LOGI(LOG_TAG, "Waiting for the next tray...");
-                    break;
-                }
+            } else {
+                consecutiveSamples = 0;
             }
+            vTaskDelay(delay);
         }
-        else
-        {
-            ESP_LOGI(LOG_TAG, "Washing session ended. No trays detected for a long time.");
-            // PHere the deep sleep or any necessary cleanup or end-of-session actions will be performed
-            break;
+
+        if (consecutiveSamples < kRequiredConsecutiveSamples) {
+            ESP_LOGW(kLogTag, "Measurement window expired without a count");
         }
     }
 }
 
-
-float kalmanFilter(int measurement)
+int measureDistance(void)
 {
-    // Prediction update
-    float predictedEstimate = currentEstimate;
-    float predictedError = estimatedError + measuredError;
+    if (!waitForLevel(kDistanceSensorGpio, 1, kPulseWaitTimeoutUs)) {
+        return -1;
+    }
+    const int64_t pulseStart = esp_timer_get_time();
 
-    // Measurement update
-    kalmanGain = predictedError / (predictedError + measuredError);
-    currentEstimate = predictedEstimate + kalmanGain * (measurement - predictedEstimate);
-    estimatedError = (1 - kalmanGain) * predictedError;
-
-    return currentEstimate;
-}
-
-int measureDistance()
-{
-    while (gpio_get_level(DISTANCE_SENSOR_GPIO) == 0)
-        ; // Wait for pulse start
-    int64_t startTimePulse = esp_timer_get_time();
-
-    while (gpio_get_level(DISTANCE_SENSOR_GPIO) == 1); // pulse end
-    int64_t endTimePulse = esp_timer_get_time();
-
-    int64_t pulseDuration = endTimePulse - startTimePulse;
-
-    if (pulseDuration <= 0 || pulseDuration > MAX_DISTANCE_PULSE_DURATION)
-    {
-        ESP_LOGI(LOG_TAG, "Measured distance out of range.");
-        return -1; // Out of range
+    if (!waitForLevel(kDistanceSensorGpio, 0, kPulseWaitTimeoutUs)) {
+        return -1;
+    }
+    const int64_t pulseDuration = esp_timer_get_time() - pulseStart;
+    if (pulseDuration <= 0 || pulseDuration > kMaxDistancePulseUs) {
+        return -1;
     }
 
-    int distance = (pulseDuration - 1000) * 3 / 4;
+    const int distance = static_cast<int>((pulseDuration - 1000) * 3 / 4);
     return distance < 0 ? 0 : distance;
 }
 
-void calibrateThresholds()
+float kalmanFilter(int measurement)
 {
-    if (calibrationSamples > 0)
-    {
-        minDistance = (1 - MIN_CONFIDENCE) * minDistance;
-        maxDistance = (1 + MIN_CONFIDENCE) * maxDistance;
-        ESP_LOGI(LOG_TAG, "Calibrated thresholds: Min: %d, Max: %d", minDistance, maxDistance);
-    }
-    else
-    {
-        ESP_LOGI(LOG_TAG, "Calibration failed: No samples collected.");
-    }
-
-    // Resets calibration variables
-    calibrationCounter = 0;
-    calibrationSamples = 0;
+    const float predictedError = estimatedError + kMeasuredError;
+    const float gain = predictedError / (predictedError + kMeasuredError);
+    currentEstimate += gain * (static_cast<float>(measurement) - currentEstimate);
+    estimatedError = (1.0F - gain) * predictedError;
+    return currentEstimate;
 }
 
-void updateDistanceStatistics(int distance)
+uint32_t dishCounterGetCount(void)
 {
-    // Updates min and max distances
-    minDistance = distance < minDistance ? distance : minDistance;
-    maxDistance = distance > maxDistance ? distance : maxDistance;
-
-    // Updates calibration counter and sample count.
-    calibrationCounter += pdMS_TO_TICKS(100); // Increment by delay of taskReadPulse
-    calibrationSamples++;
+    return dishCount.load();
 }

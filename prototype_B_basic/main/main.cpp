@@ -1,22 +1,19 @@
 #include "tasks.h"
+#include "sdkconfig.h"
 #include "nvs_flash.h"
 #include "esp_log.h"
 #include "TheThingsNetwork.h"
-#include "oled.h"
-#include "esp_sleep.h"
-#include "driver/rtc_io.h"
 #include "freertos/semphr.h"
 #include <cstring>
-#include "driver/rtc_io.h"
 
 
 // Global variables
 SemaphoreHandle_t trayDetectionSemaphore;
 
 // LoRaWAN configuration constants
-const char* appEui = "0000000000000000";
-const char* devEui = "70B3D57ED0064CC9";
-const char* appKey = "A17FB3F70891FC287716982D251F417A";
+const char *appEui = CONFIG_DISH_COUNTER_APP_EUI;
+const char *devEui = CONFIG_DISH_COUNTER_DEV_EUI;
+const char *appKey = CONFIG_DISH_COUNTER_APP_KEY;
 
 // SPI and pin configuration for The Things Network
 #define TTN_SPI_HOST HSPI_HOST
@@ -38,7 +35,8 @@ void sendMessages(void* pvParameter)
 {
     while (1) {
         printf("Sending message...\n");
-        uint8_t data[] = {static_cast<uint8_t>(count_object >> 8), static_cast<uint8_t>(count_object & 0xFF)};
+        const uint32_t count = dishCounterGetCount();
+        uint8_t data[] = {static_cast<uint8_t>(count >> 8), static_cast<uint8_t>(count & 0xFF)};
         TTNResponseCode res = ttn.transmitMessage(data, sizeof(data)); // Transmit the message
         printf(res == kTTNSuccessfulTransmission ? "Message sent.\n" : "Transmission failed.\n");
 
@@ -59,10 +57,8 @@ extern "C" void app_main(void) {
     // Define TAG for logging
     static const char *TAG = "main";
 
-    // Initialize the GPIO ISR handler service
-    err = gpio_install_isr_service(ESP_INTR_FLAG_IRAM);
-    ESP_ERROR_CHECK(err);
-    
+    initialize_gpio();
+
     // Initialize the NVS (non-volatile storage) for saving and restoring the keys
     err = nvs_flash_init();
     ESP_ERROR_CHECK(err);
@@ -86,7 +82,11 @@ extern "C" void app_main(void) {
     // Configure the SX127x pins
     ttn.configurePins(TTN_SPI_HOST, TTN_PIN_NSS, TTN_PIN_RXTX, TTN_PIN_RST, TTN_PIN_DIO0, TTN_PIN_DIO1);
 
-    // The below line can be commented after the first run as the data is saved in NVS
+    if (strlen(devEui) != 16 || strlen(appEui) != 16 || strlen(appKey) != 32) {
+        ESP_LOGE(TAG, "Configure LoRaWAN credentials with idf.py menuconfig");
+        return;
+    }
+
     ttn.provision(devEui, appEui, appKey);
 
     // Register callback for received messages
