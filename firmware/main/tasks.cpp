@@ -1,4 +1,5 @@
 #include "tasks.h"
+#include "app_config.h"
 #include "dish_counter_logic.h"
 
 #include <atomic>
@@ -9,19 +10,11 @@
 
 namespace {
 
-constexpr gpio_num_t kIrSensorGpio = GPIO_NUM_17;
-constexpr gpio_num_t kDistanceSensorGpio = GPIO_NUM_23;
-constexpr int kDebounceDelayMs = 50;
-constexpr int kMeasurementDelayMs = 100;
-constexpr int kMeasurementWindowMs = 10000;
-constexpr int kIdleLogIntervalMs = 20000;
 constexpr DishClassificationConfig kDishClassificationConfig = {
-    .minimumDistance = 200,
-    .maximumDistance = 250,
-    .requiredConsecutiveSamples = 5,
+    .minimumDistance = app_config::classification::minimumDistance,
+    .maximumDistance = app_config::classification::maximumDistance,
+    .requiredConsecutiveSamples = app_config::classification::requiredConsecutiveSamples,
 };
-constexpr int64_t kPulseWaitTimeoutUs = 3000;
-constexpr int64_t kMaxDistancePulseUs = 1850;
 
 const char *kLogTag = "dish_counter";
 
@@ -40,20 +33,29 @@ bool waitForLevel(gpio_num_t gpio, int level, int64_t timeoutUs)
 
 int measureDistance()
 {
-    if (!waitForLevel(kDistanceSensorGpio, 1, kPulseWaitTimeoutUs)) {
+    if (!waitForLevel(
+            app_config::pins::distanceSensor,
+            1,
+            app_config::timing::pulseWaitTimeoutUs)) {
         return -1;
     }
     const int64_t pulseStart = esp_timer_get_time();
 
-    if (!waitForLevel(kDistanceSensorGpio, 0, kPulseWaitTimeoutUs)) {
+    if (!waitForLevel(
+            app_config::pins::distanceSensor,
+            0,
+            app_config::timing::pulseWaitTimeoutUs)) {
         return -1;
     }
     const int64_t pulseDuration = esp_timer_get_time() - pulseStart;
-    if (pulseDuration <= 0 || pulseDuration > kMaxDistancePulseUs) {
+    if (pulseDuration <= 0 || pulseDuration > app_config::timing::maximumDistancePulseUs) {
         return -1;
     }
 
-    const int distance = static_cast<int>((pulseDuration - 1000) * 3 / 4);
+    const int distance = static_cast<int>(
+        (pulseDuration - app_config::distance_sensor::pulseZeroOffsetUs)
+        * app_config::distance_sensor::distanceScaleNumerator
+        / app_config::distance_sensor::distanceScaleDenominator);
     return distance < 0 ? 0 : distance;
 }
 
@@ -64,7 +66,8 @@ void initialize_gpio(void)
     gpio_config_t config = {};
     config.intr_type = GPIO_INTR_DISABLE;
     config.mode = GPIO_MODE_INPUT;
-    config.pin_bit_mask = (1ULL << kIrSensorGpio) | (1ULL << kDistanceSensorGpio);
+    config.pin_bit_mask = (1ULL << app_config::pins::irSensor)
+        | (1ULL << app_config::pins::distanceSensor);
     config.pull_up_en = GPIO_PULLUP_ENABLE;
     config.pull_down_en = GPIO_PULLDOWN_DISABLE;
     ESP_ERROR_CHECK(gpio_config(&config));
@@ -72,13 +75,13 @@ void initialize_gpio(void)
 
 void monitorIRSensorTask(void *)
 {
-    const TickType_t delay = pdMS_TO_TICKS(kDebounceDelayMs);
-    const TickType_t idleInterval = pdMS_TO_TICKS(kIdleLogIntervalMs);
+    const TickType_t delay = pdMS_TO_TICKS(app_config::timing::irDebounceMs);
+    const TickType_t idleInterval = pdMS_TO_TICKS(app_config::timing::idleLogIntervalMs);
     TickType_t lastDetection = xTaskGetTickCount();
     bool lastTrayState = false;
 
     while (true) {
-        const bool trayPresent = gpio_get_level(kIrSensorGpio) == 0;
+        const bool trayPresent = gpio_get_level(app_config::pins::irSensor) == 0;
         if (trayPresent != lastTrayState) {
             lastTrayState = trayPresent;
             if (trayPresent) {
@@ -91,7 +94,10 @@ void monitorIRSensorTask(void *)
         }
 
         if ((xTaskGetTickCount() - lastDetection) > idleInterval) {
-            ESP_LOGI(kLogTag, "Idle: no tray detected for %d seconds", kIdleLogIntervalMs / 1000);
+            ESP_LOGI(
+                kLogTag,
+                "Idle: no tray detected for %lu seconds",
+                static_cast<unsigned long>(app_config::timing::idleLogIntervalMs / 1000));
             lastDetection = xTaskGetTickCount();
         }
         vTaskDelay(delay);
@@ -100,9 +106,9 @@ void monitorIRSensorTask(void *)
 
 void readPulseTask(void *)
 {
-    const TickType_t delay = pdMS_TO_TICKS(kMeasurementDelayMs);
-    const TickType_t window = pdMS_TO_TICKS(kMeasurementWindowMs);
-    ScalarKalmanFilter distanceFilter;
+    const TickType_t delay = pdMS_TO_TICKS(app_config::timing::measurementIntervalMs);
+    const TickType_t window = pdMS_TO_TICKS(app_config::timing::measurementWindowMs);
+    ScalarKalmanFilter distanceFilter(app_config::classification::kalmanMeasuredError);
 
     while (true) {
         if (xSemaphoreTake(trayDetectionSemaphore, portMAX_DELAY) != pdTRUE) {

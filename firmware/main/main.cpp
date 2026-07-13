@@ -1,3 +1,4 @@
+#include "app_config.h"
 #include "lorawan_service.h"
 #include "tasks.h"
 
@@ -20,14 +21,28 @@ bool startDishCounterTasks()
     }
 
     TaskHandle_t distanceTask = nullptr;
-    if (xTaskCreate(readPulseTask, "readPulseTask", 2048, nullptr, 4, &distanceTask) != pdPASS) {
+    if (xTaskCreate(
+            readPulseTask,
+            "readPulseTask",
+            app_config::tasks::distanceMeasurementStackSize,
+            nullptr,
+            app_config::tasks::distanceMeasurementPriority,
+            &distanceTask)
+        != pdPASS) {
         ESP_LOGE(TAG, "Failed to create distance measurement task");
         vSemaphoreDelete(trayDetectionSemaphore);
         trayDetectionSemaphore = nullptr;
         return false;
     }
 
-    if (xTaskCreate(monitorIRSensorTask, "monitorIRSensorTask", 2048, nullptr, 5, nullptr) != pdPASS) {
+    if (xTaskCreate(
+            monitorIRSensorTask,
+            "monitorIRSensorTask",
+            app_config::tasks::trayMonitorStackSize,
+            nullptr,
+            app_config::tasks::trayMonitorPriority,
+            nullptr)
+        != pdPASS) {
         ESP_LOGE(TAG, "Failed to create tray monitoring task");
         vTaskDelete(distanceTask);
         vSemaphoreDelete(trayDetectionSemaphore);

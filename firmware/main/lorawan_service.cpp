@@ -1,4 +1,5 @@
 #include "lorawan_service.h"
+#include "app_config.h"
 
 #include "TheThingsNetwork.h"
 #include "driver/gpio.h"
@@ -17,20 +18,8 @@
 namespace {
 
 constexpr char TAG[] = "lorawan";
-constexpr TickType_t JOIN_RETRY_DELAY = pdMS_TO_TICKS(30000);
-constexpr UBaseType_t SERVICE_PRIORITY = 3;
-constexpr uint32_t SERVICE_STACK_SIZE = 4096;
 
 constexpr spi_host_device_t TTN_SPI_HOST = HSPI_HOST;
-constexpr int TTN_SPI_DMA_CHANNEL = 1;
-constexpr gpio_num_t TTN_PIN_SPI_SCLK = GPIO_NUM_5;
-constexpr gpio_num_t TTN_PIN_SPI_MOSI = GPIO_NUM_27;
-constexpr gpio_num_t TTN_PIN_SPI_MISO = GPIO_NUM_19;
-constexpr gpio_num_t TTN_PIN_NSS = GPIO_NUM_18;
-constexpr int TTN_PIN_RXTX = TTN_NOT_CONNECTED;
-constexpr gpio_num_t TTN_PIN_RST = GPIO_NUM_14;
-constexpr gpio_num_t TTN_PIN_DIO0 = GPIO_NUM_26;
-constexpr gpio_num_t TTN_PIN_DIO1 = GPIO_NUM_35;
 
 TheThingsNetwork ttn;
 
@@ -76,13 +65,16 @@ bool initializeNvs()
 bool initializeRadio()
 {
     spi_bus_config_t busConfig = {};
-    busConfig.miso_io_num = TTN_PIN_SPI_MISO;
-    busConfig.mosi_io_num = TTN_PIN_SPI_MOSI;
-    busConfig.sclk_io_num = TTN_PIN_SPI_SCLK;
+    busConfig.miso_io_num = app_config::pins::lorawanSpiMiso;
+    busConfig.mosi_io_num = app_config::pins::lorawanSpiMosi;
+    busConfig.sclk_io_num = app_config::pins::lorawanSpiClock;
     busConfig.quadwp_io_num = -1;
     busConfig.quadhd_io_num = -1;
 
-    const esp_err_t result = spi_bus_initialize(TTN_SPI_HOST, &busConfig, TTN_SPI_DMA_CHANNEL);
+    const esp_err_t result = spi_bus_initialize(
+        TTN_SPI_HOST,
+        &busConfig,
+        app_config::lorawan::spiDmaChannel);
     if (result != ESP_OK) {
         ESP_LOGE(TAG, "SPI initialization failed: %s", esp_err_to_name(result));
         return false;
@@ -90,11 +82,11 @@ bool initializeRadio()
 
     ttn.configurePins(
         TTN_SPI_HOST,
-        TTN_PIN_NSS,
-        TTN_PIN_RXTX,
-        TTN_PIN_RST,
-        TTN_PIN_DIO0,
-        TTN_PIN_DIO1);
+        app_config::pins::lorawanChipSelect,
+        TTN_NOT_CONNECTED,
+        app_config::pins::lorawanReset,
+        app_config::pins::lorawanDio0,
+        app_config::pins::lorawanDio1);
     return true;
 }
 
@@ -130,8 +122,11 @@ void serviceTask(void *)
     ttn.onMessage(messageReceived);
 
     while (!ttn.join()) {
-        ESP_LOGW(TAG, "LoRaWAN join failed; retrying in 30 seconds");
-        vTaskDelay(JOIN_RETRY_DELAY);
+        ESP_LOGW(
+            TAG,
+            "LoRaWAN join failed; retrying in %lu seconds",
+            static_cast<unsigned long>(app_config::timing::lorawanJoinRetryMs / 1000));
+        vTaskDelay(pdMS_TO_TICKS(app_config::timing::lorawanJoinRetryMs));
     }
 
     ESP_LOGI(TAG, "LoRaWAN joined");
@@ -145,9 +140,9 @@ bool lorawanServiceStart()
     return xTaskCreate(
                serviceTask,
                "lorawanService",
-               SERVICE_STACK_SIZE,
+               app_config::tasks::lorawanStackSize,
                nullptr,
-               SERVICE_PRIORITY,
+               app_config::tasks::lorawanPriority,
                nullptr)
         == pdPASS;
 }
