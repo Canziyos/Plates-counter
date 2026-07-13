@@ -70,6 +70,16 @@ extern "C" void app_main(void) {
         return;
     }
 
+    if (xTaskCreate(readPulseTask, "readPulseTask", 2048, nullptr, 4, nullptr) != pdPASS) {
+        ESP_LOGE(TAG, "Failed to create distance measurement task");
+        return;
+    }
+    if (xTaskCreate(monitorIRSensorTask, "monitorIRSensorTask", 2048, nullptr, 5, nullptr) != pdPASS) {
+        ESP_LOGE(TAG, "Failed to create tray monitoring task");
+        return;
+    }
+    ESP_LOGI(TAG, "Dish counter tasks started.");
+
     // Initialize SPI bus
     spi_bus_config_t spi_bus_config;
     memset(&spi_bus_config, 0, sizeof(spi_bus_config));
@@ -92,17 +102,11 @@ extern "C" void app_main(void) {
     // Register callback for received messages
     ttn.onMessage(messageReceived);
 
-    printf("Joining...\n");
-    if (ttn.join())
-    {
-        printf("Joined.\n");
-        xTaskCreate(monitorIRSensorTask, "monitorIRSensorTask", 2048, NULL, 5, NULL);
-        xTaskCreate(readPulseTask, "readPulseTask", 2048, NULL, 4, NULL);
-        //xTaskCreate(sendMessages, "send_messages", 1024 * 4, (void* )0, 3, nullptr);
+    ESP_LOGI(TAG, "Joining LoRaWAN");
 
-    }
-    else
-    {
-        printf("Join failed. Goodbye\n");
+    if (ttn.join()) {
+        ESP_LOGI(TAG, "LoRaWAN joined");
+    } else {
+        ESP_LOGW(TAG, "LoRaWAN join failed; dish counting continues");
     }
 }
