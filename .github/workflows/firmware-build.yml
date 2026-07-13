@@ -1,0 +1,33 @@
+name: Firmware build
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "firmware/**"
+      - ".github/workflows/firmware-build.yml"
+  pull_request:
+    branches: [main]
+    paths:
+      - "firmware/**"
+      - ".github/workflows/firmware-build.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: ESP-IDF v5.0 / ESP32
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Build firmware
+        uses: espressif/esp-idf-ci-action@v1
+        with:
+          esp_idf_version: v5.0
+          target: esp32
+          path: firmware
