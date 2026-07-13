@@ -2,7 +2,6 @@
 
 #include "driver/gpio.h"
 
-#include <cstddef>
 #include <cstdint>
 
 namespace app_config {
@@ -35,15 +34,6 @@ constexpr std::int64_t maximumDistancePulseUs = 1850;
 
 } // namespace timing
 
-namespace classification {
-
-constexpr int minimumDistance = 200;
-constexpr int maximumDistance = 250;
-constexpr std::size_t requiredConsecutiveSamples = 5;
-constexpr float kalmanMeasuredError = 0.1F;
-
-} // namespace classification
-
 namespace distance_sensor {
 
 constexpr std::int64_t pulseZeroOffsetUs = 1000;
@@ -69,8 +59,6 @@ constexpr int spiDmaChannel = 1;
 
 } // namespace lorawan
 
-static_assert(classification::minimumDistance <= classification::maximumDistance);
-static_assert(classification::requiredConsecutiveSamples > 0);
 static_assert(distance_sensor::distanceScaleDenominator != 0);
 
 } // namespace app_config

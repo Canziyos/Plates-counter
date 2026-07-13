@@ -1,0 +1,11 @@
+# A timeout resets the streak; five later readings still produce one count.
+tray
+225
+225
+-1
+225
+225
+225
+225
+225
+end

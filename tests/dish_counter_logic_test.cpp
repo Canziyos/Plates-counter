@@ -1,3 +1,4 @@
+#include "dish_counter_defaults.h"
 #include "dish_counter_logic.h"
 
 #include <cmath>
@@ -18,7 +19,11 @@ void expect(bool condition, const char *message)
 
 DishClassifier makeClassifier()
 {
-    return DishClassifier({200, 250, 5});
+    return DishClassifier({
+        dish_counter_defaults::minimumDistance,
+        dish_counter_defaults::maximumDistance,
+        dish_counter_defaults::requiredConsecutiveSamples,
+    });
 }
 
 void testCountsAfterRequiredStreak()

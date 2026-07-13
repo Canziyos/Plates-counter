@@ -6,12 +6,16 @@ on:
     paths:
       - "firmware/**"
       - "tests/**"
+      - "tools/**"
+      - "examples/traces/**"
       - ".github/workflows/firmware-build.yml"
   pull_request:
     branches: [main]
     paths:
       - "firmware/**"
       - "tests/**"
+      - "tools/**"
+      - "examples/traces/**"
       - ".github/workflows/firmware-build.yml"
   workflow_dispatch:
 

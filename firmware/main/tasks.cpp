@@ -1,5 +1,6 @@
 #include "tasks.h"
 #include "app_config.h"
+#include "dish_counter_defaults.h"
 #include "dish_counter_logic.h"
 
 #include <atomic>
@@ -11,9 +12,9 @@
 namespace {
 
 constexpr DishClassificationConfig kDishClassificationConfig = {
-    .minimumDistance = app_config::classification::minimumDistance,
-    .maximumDistance = app_config::classification::maximumDistance,
-    .requiredConsecutiveSamples = app_config::classification::requiredConsecutiveSamples,
+    .minimumDistance = dish_counter_defaults::minimumDistance,
+    .maximumDistance = dish_counter_defaults::maximumDistance,
+    .requiredConsecutiveSamples = dish_counter_defaults::requiredConsecutiveSamples,
 };
 
 const char *kLogTag = "dish_counter";
@@ -108,7 +109,7 @@ void readPulseTask(void *)
 {
     const TickType_t delay = pdMS_TO_TICKS(app_config::timing::measurementIntervalMs);
     const TickType_t window = pdMS_TO_TICKS(app_config::timing::measurementWindowMs);
-    ScalarKalmanFilter distanceFilter(app_config::classification::kalmanMeasuredError);
+    ScalarKalmanFilter distanceFilter(dish_counter_defaults::kalmanMeasuredError);
 
     while (true) {
         if (xSemaphoreTake(trayDetectionSemaphore, portMAX_DELAY) != pdTRUE) {
