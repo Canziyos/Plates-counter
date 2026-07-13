@@ -141,8 +141,3 @@ void readPulseTask(void *)
         }
     }
 }
-
-uint32_t dishCounterGetCount(void)
-{
-    return dishCount.load();
-}

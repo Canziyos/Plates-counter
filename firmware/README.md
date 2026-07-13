@@ -25,6 +25,8 @@ idf.py -p PORT flash monitor
 
 Under **Dish counter configuration**, provide the DevEUI, AppEUI and AppKey. Credentials are intentionally excluded from source control.
 
+Successful GitHub Actions builds publish an unprovisioned firmware bundle containing `dish_counter.bin`, the ESP32 bootloader, the partition table, flash-argument metadata and SHA-256 checksums. Download it from the run's **Artifacts** section. For a TTN-connected device, build locally after supplying credentials through `menuconfig`.
+
 ## Current behavior
 
 1. The IR task detects the leading edge of a tray and signals the measurement task.
@@ -33,3 +35,5 @@ Under **Dish counter configuration**, provide the DevEUI, AppEUI and AppKey. Cre
 4. Pulse waits time out, preventing a disconnected sensor from locking a FreeRTOS task.
 
 LoRaWAN provisioning and join retries run independently of dish counting. Telemetry transmission remains intentionally unimplemented until payload cadence, format and backend integration are validated.
+
+See the repository's [architecture document](../docs/architecture.md) for module ownership, failure isolation, configuration locations and verification limits.
