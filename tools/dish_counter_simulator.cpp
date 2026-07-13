@@ -62,7 +62,8 @@ public:
             return true;
         }
 
-        const int filteredDistance = static_cast<int>(filter_.update(rawDistance));
+        const int filteredDistance = static_cast<int>(
+            filter_.update(static_cast<float>(rawDistance)));
         const bool countedNow = classifier_.recordSample(filteredDistance);
         std::cout << "  raw=" << std::setw(3) << rawDistance
                   << "  filtered=" << std::setw(3) << filteredDistance
