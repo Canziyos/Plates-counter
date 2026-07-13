@@ -33,7 +33,7 @@ jobs:
 
     steps:
       - name: Check out repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       - name: Configure tests
         run: cmake -S tests -B tests/build
@@ -50,7 +50,7 @@ jobs:
 
     steps:
       - name: Check out repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       - name: Build firmware
         uses: espressif/esp-idf-ci-action@v1
