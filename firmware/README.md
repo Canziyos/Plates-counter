@@ -1,13 +1,13 @@
 # Dish Counter Firmware
 
-This directory contains the canonical ESP-IDF firmware. `Prototype_A` at the repository root is retained only as historical reference.
+This directory contains the repository's only buildable ESP-IDF firmware. The retired three-IR-sensor design is preserved as a [historical note](../docs/historical-prototype-a.md).
 
 ## Hardware assumptions
 
 - ESP32 Heltec LoRa board with an SX127x radio
 - Active-low IR tray sensor on GPIO 17
 - Distance-sensor pulse input on GPIO 23
-- SX127x SPI and interrupt pins as defined in `main/main.cpp`
+- SX127x SPI and interrupt pins as defined in `main/app_config.h`
 
 Verify voltage levels and pin assignments against the exact board and sensor revisions before powering the system.
 
@@ -32,4 +32,4 @@ Under **Dish counter configuration**, provide the DevEUI, AppEUI and AppKey. Cre
 3. Five consecutive filtered samples inside the configured range produce one count.
 4. Pulse waits time out, preventing a disconnected sensor from locking a FreeRTOS task.
 
-LoRa transmission code exists but its task remains disabled in `main.cpp` until payload cadence and backend integration are validated.
+LoRaWAN provisioning and join retries run independently of dish counting. Telemetry transmission remains intentionally unimplemented until payload cadence, format and backend integration are validated.

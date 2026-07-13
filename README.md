@@ -7,10 +7,12 @@ An ESP32 proof of concept for counting trays or dishes passing through a cafeter
 ```text
 .
 ├── firmware/           # Canonical ESP-IDF firmware
-└── Prototype_A/        # Historical first prototype
+├── tests/              # Hardware-independent logic tests
+└── docs/               # Architecture and historical design notes
 ```
 
 Start with [`firmware/README.md`](firmware/README.md) for hardware assumptions, configuration and build commands.
+The retired three-IR-sensor design is documented in [`docs/historical-prototype-a.md`](docs/historical-prototype-a.md).
 
 ## Status
 
